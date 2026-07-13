@@ -5,7 +5,8 @@ import 'package:go_router/go_router.dart';
 import 'package:flux_iptv/core/providers/streams_provider.dart';
 import 'package:flux_iptv/core/models/stream_model.dart';
 import 'package:intl/intl.dart';
-
+import 'package:flux_iptv/core/utils/responsive_layout.dart';
+import 'package:flux_iptv/core/providers/settings_provider.dart';
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
@@ -15,7 +16,7 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   late Timer _timer;
-  String _currentTime = '';
+  DateTime _currentTime = DateTime.now();
 
   @override
   void initState() {
@@ -27,11 +28,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   void _updateTime() {
-    final now = DateTime.now();
-    final formatter = DateFormat('HH:mm   MMM dd, yyyy');
     if (mounted) {
       setState(() {
-        _currentTime = formatter.format(now);
+        _currentTime = DateTime.now();
       });
     }
   }
@@ -84,6 +83,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Widget _buildHeader() {
+    final isMobile = ResponsiveLayout.isMobile(context);
+    final settings = ref.watch(settingsProvider);
+    final timeFormat = settings.timeFormat24h ? 'HH:mm' : 'hh:mm a';
+    final fullFormat = settings.timeFormat24h ? 'HH:mm   MMM dd, yyyy' : 'hh:mm a   MMM dd, yyyy';
+
+    final timeStr = isMobile 
+        ? DateFormat(timeFormat).format(_currentTime)
+        : DateFormat(fullFormat).format(_currentTime);
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
       child: Row(
@@ -109,7 +117,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           Row(
             children: [
               Text(
-                _currentTime,
+                timeStr,
                 style: const TextStyle(color: Colors.white70, fontSize: 16),
               ),
               const SizedBox(width: 16),
@@ -153,93 +161,167 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Widget _buildDashboard(BuildContext context, List<StreamModel> streams) {
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-      child: Column(
-        children: [
-          // Live TV (Full Width)
-          _DashboardTile(
-            title: 'TV AO VIVO',
-            icon: Icons.tv,
-            gradientColors: const [Color(0xFF00C6FF), Color(0xFF0072FF)],
-            height: 160,
-            onTap: () {
-              context.push('/content', extra: {'type': StreamType.live});
-            },
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isMobile = ResponsiveLayout.isMobile(context);
+        final isTablet = ResponsiveLayout.isTablet(context);
+        final isDesktop = ResponsiveLayout.isDesktopOrTV(context);
+        final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
+
+        double tvHeight = isTablet ? 180 : (isDesktop ? 220 : 160);
+        double movieHeight = isTablet ? 180 : (isDesktop ? 220 : 140);
+        double extraHeight = isTablet ? 140 : (isDesktop ? 160 : 110);
+
+        // Se for um celular em modo paisagem (tela deitada com pouca altura)
+        if (isLandscape && constraints.maxHeight < 600) {
+          final totalAvailable = constraints.maxHeight - 64; // Subtrai os paddings
+          
+          if (isMobile) {
+            // No mobile temos 3 linhas, então dividimos o espaço por 3
+            tvHeight = totalAvailable * 0.35;
+            movieHeight = totalAvailable * 0.35;
+            extraHeight = totalAvailable * 0.30;
+          } else {
+            // Em tablet/paisagem temos 2 linhas
+            tvHeight = totalAvailable * 0.50;
+            movieHeight = totalAvailable * 0.50;
+            extraHeight = totalAvailable * 0.50;
+          }
+        }
+
+        return SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          padding: EdgeInsets.symmetric(
+            horizontal: isDesktop ? 48.0 : 16.0,
+            vertical: isDesktop ? 32.0 : 8.0,
           ),
-          const SizedBox(height: 16),
-          // Movies & Series (Half Width)
-          Row(
+          child: Column(
             children: [
-              Expanded(
-                child: _DashboardTile(
-                  title: 'FILMES',
-                  icon: Icons.movie,
-                  gradientColors: const [Color(0xFFFF512F), Color(0xFFDD2476)],
-                  height: 140,
-                  onTap: () {
-                    context.push('/content', extra: {'type': StreamType.movie});
-                  },
+              if (isMobile) ...[
+                // Mobile Layout (Current)
+                _DashboardTile(
+                  title: 'TV AO VIVO',
+                  icon: Icons.tv,
+                  gradientColors: const [Color(0xFF00C6FF), Color(0xFF0072FF)],
+                  height: tvHeight,
+                  onTap: () => context.push('/content', extra: {'type': StreamType.live}),
                 ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: _DashboardTile(
-                  title: 'SÉRIES',
-                  icon: Icons.video_library,
-                  gradientColors: const [Color(0xFF8E2DE2), Color(0xFF4A00E0)],
-                  height: 140,
-                  onTap: () {
-                    context.push('/content', extra: {'type': StreamType.series});
-                  },
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _DashboardTile(
+                        title: 'FILMES',
+                        icon: Icons.movie,
+                        gradientColors: const [Color(0xFFFF512F), Color(0xFFDD2476)],
+                        height: movieHeight,
+                        onTap: () => context.push('/content', extra: {'type': StreamType.movie}),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: _DashboardTile(
+                        title: 'SÉRIES',
+                        icon: Icons.video_library,
+                        gradientColors: const [Color(0xFF8E2DE2), Color(0xFF4A00E0)],
+                        height: movieHeight,
+                        onTap: () => context.push('/content', extra: {'type': StreamType.series}),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _DashboardTile(
+                        title: 'PLAYLISTS',
+                        icon: Icons.playlist_add,
+                        gradientColors: const [Color(0xFFF7971E), Color(0xFFFFD200)],
+                        height: extraHeight,
+                        onTap: () => context.push('/add_playlist'),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: _DashboardTile(
+                        title: 'CONFIGURAÇÕES',
+                        icon: Icons.settings,
+                        gradientColors: const [Color(0xFF434343), Color(0xFF000000)],
+                        height: extraHeight,
+                        onTap: () => context.push('/settings'),
+                      ),
+                    ),
+                  ],
+                ),
+              ] else ...[
+                // Tablet/Desktop/TV Layout
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: _DashboardTile(
+                        title: 'TV AO VIVO',
+                        icon: Icons.tv,
+                        gradientColors: const [Color(0xFF00C6FF), Color(0xFF0072FF)],
+                        height: tvHeight,
+                        onTap: () => context.push('/content', extra: {'type': StreamType.live}),
+                      ),
+                    ),
+                    const SizedBox(width: 24),
+                    Expanded(
+                      flex: 1,
+                      child: _DashboardTile(
+                        title: 'FILMES',
+                        icon: Icons.movie,
+                        gradientColors: const [Color(0xFFFF512F), Color(0xFFDD2476)],
+                        height: movieHeight,
+                        onTap: () => context.push('/content', extra: {'type': StreamType.movie}),
+                      ),
+                    ),
+                    const SizedBox(width: 24),
+                    Expanded(
+                      flex: 1,
+                      child: _DashboardTile(
+                        title: 'SÉRIES',
+                        icon: Icons.video_library,
+                        gradientColors: const [Color(0xFF8E2DE2), Color(0xFF4A00E0)],
+                        height: movieHeight,
+                        onTap: () => context.push('/content', extra: {'type': StreamType.series}),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _DashboardTile(
+                        title: 'PLAYLISTS',
+                        icon: Icons.playlist_add,
+                        gradientColors: const [Color(0xFFF7971E), Color(0xFFFFD200)],
+                        height: extraHeight,
+                        onTap: () => context.push('/add_playlist'),
+                      ),
+                    ),
+                    const SizedBox(width: 24),
+                    Expanded(
+                      child: _DashboardTile(
+                        title: 'CONFIGURAÇÕES',
+                        icon: Icons.settings,
+                        gradientColors: const [Color(0xFF434343), Color(0xFF000000)],
+                        height: extraHeight,
+                        onTap: () => context.push('/settings'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 24),
             ],
           ),
-          const SizedBox(height: 16),
-          // Lower utilities
-          Row(
-            children: [
-              Expanded(
-                child: _DashboardTile(
-                  title: 'FAVORITOS',
-                  icon: Icons.favorite,
-                  gradientColors: const [Color(0xFF11998E), Color(0xFF38EF7D)],
-                  height: 110,
-                  onTap: () {
-                    // TODO: Create a favorites filter or screen
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Em breve')));
-                  },
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: _DashboardTile(
-                  title: 'PLAYLISTS',
-                  icon: Icons.playlist_add,
-                  gradientColors: const [Color(0xFFF7971E), Color(0xFFFFD200)],
-                  height: 110,
-                  onTap: () {
-                    context.push('/add_playlist');
-                  },
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          _DashboardTile(
-            title: 'CONFIGURAÇÕES',
-            icon: Icons.settings,
-            gradientColors: const [Color(0xFF434343), Color(0xFF000000)],
-            height: 90,
-            onTap: () {
-               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Em breve')));
-            },
-          ),
-          const SizedBox(height: 24),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -263,7 +345,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 }
 
-class _DashboardTile extends StatelessWidget {
+class _DashboardTile extends StatefulWidget {
   final String title;
   final IconData icon;
   final List<Color> gradientColors;
@@ -279,52 +361,82 @@ class _DashboardTile extends StatelessWidget {
   });
 
   @override
+  State<_DashboardTile> createState() => _DashboardTileState();
+}
+
+class _DashboardTileState extends State<_DashboardTile> {
+  bool _isFocused = false;
+
+  @override
   Widget build(BuildContext context) {
-    return Container(
-      height: height,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: gradientColors.last.withOpacity(0.4),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(16),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
-          splashColor: Colors.white.withOpacity(0.2),
-          highlightColor: Colors.white.withOpacity(0.1),
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              gradient: LinearGradient(
-                colors: gradientColors,
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              border: Border.all(color: Colors.white.withOpacity(0.1), width: 1),
+    return Focus(
+      onFocusChange: (focused) {
+        setState(() {
+          _isFocused = focused;
+        });
+      },
+      child: AnimatedScale(
+        scale: _isFocused ? 1.05 : 1.0,
+        duration: const Duration(milliseconds: 200),
+        child: Container(
+          height: widget.height,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: _isFocused ? Colors.white : Colors.transparent,
+              width: 3.0,
             ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(icon, size: height * 0.35, color: Colors.white),
-                const SizedBox(height: 12),
-                Text(
-                  title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.1,
+            boxShadow: [
+              BoxShadow(
+                color: _isFocused 
+                    ? Colors.white.withOpacity(0.5) 
+                    : widget.gradientColors.last.withOpacity(0.4),
+                blurRadius: _isFocused ? 20 : 12,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(16),
+            child: InkWell(
+              onTap: widget.onTap,
+              borderRadius: BorderRadius.circular(16),
+              splashColor: Colors.white.withOpacity(0.2),
+              highlightColor: Colors.white.withOpacity(0.1),
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(13),
+                  gradient: LinearGradient(
+                    colors: widget.gradientColors,
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
+                  border: Border.all(color: Colors.white.withOpacity(0.1), width: 1),
                 ),
-              ],
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(widget.icon, size: widget.height * 0.35, color: Colors.white),
+                    const SizedBox(height: 12),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          widget.title,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.1,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),

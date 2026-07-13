@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flux_iptv/core/models/stream_model.dart';
 import 'package:flux_iptv/core/providers/streams_provider.dart';
 import 'package:flux_iptv/core/database/local_storage.dart';
 import 'package:flux_iptv/core/parser/xtream_api.dart';
+import 'package:flux_iptv/core/utils/responsive_layout.dart';
 
 class NetflixMoviesLayout extends ConsumerStatefulWidget {
   final List<StreamModel> items;
@@ -25,6 +27,9 @@ class _NetflixMoviesLayoutState extends ConsumerState<NetflixMoviesLayout> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   String? _selectedCategory;
+
+  bool _searchFocused = false;
+  bool _filterFocused = false;
 
   late Map<String, List<StreamModel>> _categories;
   late List<String> _categoryNames;
@@ -158,16 +163,18 @@ class _NetflixMoviesLayoutState extends ConsumerState<NetflixMoviesLayout> {
               ? _buildSearchResults()
               : LayoutBuilder(
                   builder: (context, constraints) {
+                    final isMobile = ResponsiveLayout.isMobile(context);
+                    final isTablet = ResponsiveLayout.isTablet(context);
                     return Column(
                       children: [
-                        // Hero Section (60%)
+                        // Hero Section (Responsive height)
                         SizedBox(
-                          height: constraints.maxHeight * 0.60,
+                          height: constraints.maxHeight * (isMobile ? 0.45 : (isTablet ? 0.50 : 0.60)),
                           child: _buildHeroSection(),
                         ),
-                        // Rails Section (40%)
+                        // Rails Section
                         Expanded(
-                          child: _buildRails(),
+                          child: _buildRails(isMobile, isTablet),
                         ),
                       ],
                     );
@@ -238,47 +245,91 @@ class _NetflixMoviesLayoutState extends ConsumerState<NetflixMoviesLayout> {
       child: Row(
         children: [
           Expanded(
-            child: TextField(
-              controller: _searchController,
-              onChanged: (val) {
-                setState(() {
-                  _searchQuery = val;
-                });
-              },
-              decoration: InputDecoration(
-                hintText: 'Pesquisar...',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _searchQuery.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() {
-                            _searchQuery = '';
-                          });
-                        },
-                      )
-                    : null,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+            child: Focus(
+              onFocusChange: (focused) => setState(() => _searchFocused = focused),
+              child: Container(
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: _searchFocused ? Colors.white : Colors.transparent,
+                    width: _searchFocused ? 2 : 0,
+                  ),
+                  borderRadius: BorderRadius.circular(14),
                 ),
-                contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                child: TextField(
+                  controller: _searchController,
+                  onChanged: (val) {
+                    setState(() {
+                      _searchQuery = val;
+                    });
+                  },
+                  decoration: InputDecoration(
+                    hintText: 'Pesquisar...',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: _searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() {
+                                _searchQuery = '';
+                              });
+                            },
+                          )
+                        : null,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                  ),
+                ),
               ),
             ),
           ),
           const SizedBox(width: 8),
-          Container(
-            decoration: BoxDecoration(
-              color: _selectedCategory != null ? Colors.amber.withOpacity(0.2) : Colors.transparent,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: _selectedCategory != null ? Colors.amber : Colors.white24),
-            ),
-            child: IconButton(
-              icon: Icon(
-                Icons.filter_list,
-                color: _selectedCategory != null ? Colors.amber : Colors.white,
+          Focus(
+            onFocusChange: (focused) => setState(() => _filterFocused = focused),
+            onKeyEvent: (node, event) {
+              if (event is KeyDownEvent &&
+                  (event.logicalKey == LogicalKeyboardKey.select ||
+                      event.logicalKey == LogicalKeyboardKey.enter ||
+                      event.logicalKey == LogicalKeyboardKey.numpadEnter)) {
+                _showCategoryFilter();
+                return KeyEventResult.handled;
+              }
+              return KeyEventResult.ignored;
+            },
+            child: GestureDetector(
+              onTap: _showCategoryFilter,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: _selectedCategory != null ? Colors.amber.withOpacity(0.2) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: _filterFocused 
+                        ? Colors.white 
+                        : (_selectedCategory != null ? Colors.amber : Colors.white24),
+                    width: _filterFocused ? 3 : 1,
+                  ),
+                  boxShadow: _filterFocused
+                      ? [
+                          BoxShadow(
+                            color: Colors.white.withOpacity(0.3),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          )
+                        ]
+                      : [],
+                ),
+                child: IconButton(
+                  icon: Icon(
+                    Icons.filter_list,
+                    color: _filterFocused 
+                        ? Colors.white 
+                        : (_selectedCategory != null ? Colors.amber : Colors.white),
+                  ),
+                  onPressed: _showCategoryFilter,
+                ),
               ),
-              onPressed: _showCategoryFilter,
             ),
           ),
         ],
@@ -400,11 +451,14 @@ class _NetflixMoviesLayoutState extends ConsumerState<NetflixMoviesLayout> {
     );
   }
 
-  Widget _buildRails() {
+  Widget _buildRails(bool isMobile, bool isTablet) {
+    final double railHeight = isMobile ? 150 : (isTablet ? 180 : 220);
+    final double itemWidth = isMobile ? 250 : (isTablet ? 300 : 350);
+
     return NotificationListener<ScrollNotification>(
       onNotification: (scrollInfo) {
         if (scrollInfo is ScrollUpdateNotification && scrollInfo.metrics.axis == Axis.vertical) {
-          final rowIndex = (scrollInfo.metrics.pixels / 200).clamp(0, _categoryNames.length - 1).toInt();
+          final rowIndex = (scrollInfo.metrics.pixels / (railHeight + 50)).clamp(0, _categoryNames.length - 1).toInt();
           final catName = _categoryNames[rowIndex];
           final streams = _categories[catName]!;
           final movieToFocus = _lastFocusedPerCategory[catName] ?? streams.first;
@@ -434,11 +488,11 @@ class _NetflixMoviesLayoutState extends ConsumerState<NetflixMoviesLayout> {
                 ),
               ),
               SizedBox(
-                height: 150,
+                height: railHeight,
                 child: NotificationListener<ScrollNotification>(
                   onNotification: (scrollInfo) {
                     if (scrollInfo is ScrollUpdateNotification && scrollInfo.metrics.axis == Axis.horizontal) {
-                      final itemIndex = (scrollInfo.metrics.pixels / 266).clamp(0, streams.length - 1).toInt();
+                      final itemIndex = (scrollInfo.metrics.pixels / (itemWidth + 16)).clamp(0, streams.length - 1).toInt();
                       _onMovieScrolled(streams[itemIndex], catName);
                     }
                     return false;
@@ -452,6 +506,7 @@ class _NetflixMoviesLayoutState extends ConsumerState<NetflixMoviesLayout> {
                       return MovieThumbnail(
                         movie: stream,
                         focusedNotifier: _focusedMovieNotifier,
+                        width: itemWidth,
                         onFocus: () => _onMovieFocused(stream, catName),
                         onTap: () {
                           if (stream.streamType == StreamType.series) {
@@ -502,8 +557,8 @@ class _NetflixMoviesLayoutState extends ConsumerState<NetflixMoviesLayout> {
 
     return GridView.builder(
       padding: const EdgeInsets.all(16.0),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: ResponsiveLayout.getCrossAxisCount(context, mobile: 2, tablet: 4, desktop: 6),
         childAspectRatio: 0.85,
         crossAxisSpacing: 16,
         mainAxisSpacing: 24,
@@ -541,6 +596,7 @@ class MovieThumbnail extends StatefulWidget {
   final StreamModel movie;
   final ValueNotifier<StreamModel?> focusedNotifier;
   final bool showTitleBelow;
+  final double width;
   final VoidCallback onFocus;
   final VoidCallback onTap;
 
@@ -549,6 +605,7 @@ class MovieThumbnail extends StatefulWidget {
     required this.movie,
     required this.focusedNotifier,
     this.showTitleBelow = false,
+    this.width = 250,
     required this.onFocus,
     required this.onTap,
   });
@@ -601,7 +658,7 @@ class _MovieThumbnailState extends State<MovieThumbnail> {
 
     final imageContainer = AnimatedContainer(
       duration: const Duration(milliseconds: 200),
-      width: widget.showTitleBelow ? double.infinity : 250,
+      width: widget.showTitleBelow ? double.infinity : widget.width,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(8.0),
         border: Border.all(
@@ -646,6 +703,17 @@ class _MovieThumbnailState extends State<MovieThumbnail> {
           if (focused) {
             widget.onFocus();
           }
+        },
+        onKeyEvent: (node, event) {
+          if (event is KeyDownEvent &&
+              (event.logicalKey == LogicalKeyboardKey.select ||
+                  event.logicalKey == LogicalKeyboardKey.enter ||
+                  event.logicalKey == LogicalKeyboardKey.numpadEnter)) {
+            widget.onFocus();
+            widget.onTap();
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
         },
         child: GestureDetector(
           onTap: () {

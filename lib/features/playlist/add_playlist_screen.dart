@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:flux_iptv/core/providers/streams_provider.dart';
 import 'package:flux_iptv/core/parser/xtream_api.dart';
 import 'package:flux_iptv/core/database/local_storage.dart';
+import 'package:flux_iptv/core/utils/responsive_layout.dart';
 
 class AddPlaylistScreen extends ConsumerStatefulWidget {
   const AddPlaylistScreen({super.key});
@@ -25,11 +26,22 @@ class _AddPlaylistScreenState extends ConsumerState<AddPlaylistScreen> {
 
   bool _isLoading = false;
   Map<String, String>? _currentCreds;
+  String _deviceMac = 'Carregando...';
 
   @override
   void initState() {
     super.initState();
     _loadCurrentPlaylist();
+    _loadDeviceMac();
+  }
+
+  Future<void> _loadDeviceMac() async {
+    final mac = await SettingsStorage.getDeviceMac();
+    if (mounted) {
+      setState(() {
+        _deviceMac = mac;
+      });
+    }
   }
 
   Future<void> _loadCurrentPlaylist() async {
@@ -132,12 +144,18 @@ class _AddPlaylistScreenState extends ConsumerState<AddPlaylistScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktopOrTV = ResponsiveLayout.isDesktopOrTV(context);
+
+    if (isDesktopOrTV && _currentCreds == null) {
+      return _buildTvMacScreen();
+    }
+
     return DefaultTabController(
       length: 2,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Adicionar Playlist'),
-          bottom: const TabBar(
+          bottom: isDesktopOrTV && _currentCreds != null ? null : const TabBar(
             tabs: [
               Tab(text: 'Xtream Codes'),
               Tab(text: 'Link M3U'),
@@ -158,16 +176,95 @@ class _AddPlaylistScreenState extends ConsumerState<AddPlaylistScreen> {
           : Column(
               children: [
                 if (_currentCreds != null) _buildCurrentPlaylistCard(),
-                Expanded(
-                  child: TabBarView(
-                    children: [
-                      _buildXtreamTab(),
-                      _buildM3uTab(),
-                    ],
+                if (_currentCreds == null)
+                  Expanded(
+                    child: TabBarView(
+                      children: [
+                        _buildXtreamTab(),
+                        _buildM3uTab(),
+                      ],
+                    ),
                   ),
-                ),
               ],
             ),
+      ),
+    );
+  }
+
+  Widget _buildTvMacScreen() {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0D0D12),
+      appBar: AppBar(
+        title: const Text('Adicionar Playlist (TV)'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+      ),
+      body: Center(
+        child: Container(
+          width: 600,
+          padding: const EdgeInsets.all(32),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.white.withOpacity(0.1)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const Icon(Icons.qr_code_scanner, size: 80, color: Colors.blueAccent),
+              const SizedBox(height: 24),
+              const Text(
+                'Sincronize sua Playlist via Web',
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                '1. Acesse www.fluxiptv.com no seu celular ou computador.',
+                style: TextStyle(fontSize: 18, color: Colors.white70),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                '2. Insira o Código MAC abaixo para vincular sua assinatura:',
+                style: TextStyle(fontSize: 18, color: Colors.white70),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                decoration: BoxDecoration(
+                  color: Colors.black,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.amber, width: 2),
+                ),
+                child: Text(
+                  _deviceMac,
+                  style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.amber, letterSpacing: 4),
+                ),
+              ),
+              const SizedBox(height: 48),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blueAccent,
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                onPressed: () {
+                   // SIMULATION FOR TESTING WITHOUT BACKEND
+                   setState(() {
+                     _xtreamDomainController.text = 'http://tv.com:8080';
+                     _xtreamUserController.text = 'teste_tv';
+                     _xtreamPassController.text = '123456';
+                   });
+                   _fetchXtream();
+                },
+                icon: const Icon(Icons.sync),
+                label: const Text('Verificar Sincronização (Simular)', style: TextStyle(fontSize: 18)),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

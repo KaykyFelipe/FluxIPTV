@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
 
@@ -110,8 +111,45 @@ class _PlayerScreenState extends State<PlayerScreen> {
               )
             : _chewieController != null &&
                     _chewieController!.videoPlayerController.value.isInitialized
-                ? Chewie(
-                    controller: _chewieController!,
+                ? Focus(
+                    autofocus: true,
+                    onKeyEvent: (node, event) {
+                      if (event is KeyDownEvent) {
+                        final key = event.logicalKey;
+                        if (key == LogicalKeyboardKey.select ||
+                            key == LogicalKeyboardKey.enter ||
+                            key == LogicalKeyboardKey.numpadEnter ||
+                            key == LogicalKeyboardKey.space ||
+                            key == LogicalKeyboardKey.mediaPlayPause ||
+                            key == LogicalKeyboardKey.mediaPlay ||
+                            key == LogicalKeyboardKey.mediaPause) {
+                          if (_videoPlayerController.value.isPlaying) {
+                            _videoPlayerController.pause();
+                          } else {
+                            _videoPlayerController.play();
+                          }
+                          return KeyEventResult.handled;
+                        } else if (key == LogicalKeyboardKey.arrowRight ||
+                                   key == LogicalKeyboardKey.mediaFastForward) {
+                          final currentPosition = _videoPlayerController.value.position;
+                          final targetPosition = currentPosition + const Duration(seconds: 10);
+                          _videoPlayerController.seekTo(targetPosition);
+                          return KeyEventResult.handled;
+                        } else if (key == LogicalKeyboardKey.arrowLeft ||
+                                   key == LogicalKeyboardKey.mediaRewind) {
+                          final currentPosition = _videoPlayerController.value.position;
+                          final targetPosition = currentPosition - const Duration(seconds: 10);
+                          _videoPlayerController.seekTo(
+                            targetPosition.isNegative ? Duration.zero : targetPosition,
+                          );
+                          return KeyEventResult.handled;
+                        }
+                      }
+                      return KeyEventResult.ignored;
+                    },
+                    child: Chewie(
+                      controller: _chewieController!,
+                    ),
                   )
                 : const Column(
                     mainAxisAlignment: MainAxisAlignment.center,

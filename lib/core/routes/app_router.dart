@@ -6,6 +6,7 @@ import 'package:flux_iptv/features/player/player_screen.dart';
 import 'package:flux_iptv/features/series/series_details_screen.dart';
 import 'package:flux_iptv/features/home/content_screen.dart';
 import 'package:flux_iptv/core/models/stream_model.dart';
+import 'package:flux_iptv/features/settings/settings_screen.dart';
 
 final appRouter = GoRouter(
   initialLocation: '/',
@@ -59,6 +60,10 @@ final appRouter = GoRouter(
         final name = state.uri.queryParameters['name'] ?? 'Série';
         return SeriesDetailsScreen(seriesId: id, seriesName: name);
       },
+    ),
+    GoRoute(
+      path: '/settings',
+      builder: (context, state) => const SettingsScreen(),
     ),
   ],
 );

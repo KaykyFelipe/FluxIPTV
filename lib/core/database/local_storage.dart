@@ -109,3 +109,57 @@ class FavoritesStorage {
     await prefs.setStringList(_keyFavorites, favs);
   }
 }
+
+class SettingsStorage {
+  static const _keyHwDecoding = 'setting_hw_decoding';
+  static const _keyBufferSize = 'setting_buffer_size'; // 0: Small, 1: Medium, 2: Large
+  static const _keyAutoPlay = 'setting_auto_play';
+  static const _keyParentalPin = 'setting_parental_pin';
+  static const _keyEpgTimeShift = 'setting_epg_time_shift';
+  static const _keyTimeFormat24h = 'setting_time_format_24h';
+  static const _keyDeviceMac = 'device_mac_address';
+
+  static Future<String> getDeviceMac() async {
+    final prefs = await SharedPreferences.getInstance();
+    String? mac = prefs.getString(_keyDeviceMac);
+    if (mac == null || mac.isEmpty) {
+      // Generate a random 6-character hex/alphanumeric "MAC" or "Device Key"
+      const chars = '0123456789ABCDEF';
+      final rnd = DateTime.now().millisecondsSinceEpoch;
+      mac = 'FLUX-${(rnd % 1000000).toString().padLeft(6, '0')}';
+      await prefs.setString(_keyDeviceMac, mac);
+    }
+    return mac;
+  }
+
+  static Future<Map<String, dynamic>> getAllSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    return {
+      'hwDecoding': prefs.getBool(_keyHwDecoding) ?? true,
+      'bufferSize': prefs.getInt(_keyBufferSize) ?? 1,
+      'autoPlay': prefs.getBool(_keyAutoPlay) ?? false,
+      'parentalPin': prefs.getString(_keyParentalPin) ?? '',
+      'epgTimeShift': prefs.getInt(_keyEpgTimeShift) ?? 0,
+      'timeFormat24h': prefs.getBool(_keyTimeFormat24h) ?? true,
+    };
+  }
+
+  static Future<void> saveSetting(String key, dynamic value) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (value is bool) {
+      await prefs.setBool(key, value);
+    } else if (value is int) {
+      await prefs.setInt(key, value);
+    } else if (value is String) {
+      await prefs.setString(key, value);
+    }
+  }
+
+  // Helper getters for keys
+  static String get keyHwDecoding => _keyHwDecoding;
+  static String get keyBufferSize => _keyBufferSize;
+  static String get keyAutoPlay => _keyAutoPlay;
+  static String get keyParentalPin => _keyParentalPin;
+  static String get keyEpgTimeShift => _keyEpgTimeShift;
+  static String get keyTimeFormat24h => _keyTimeFormat24h;
+}
